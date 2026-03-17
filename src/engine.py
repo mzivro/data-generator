@@ -60,7 +60,7 @@ class Engine:
 
         model = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
 
-        self.llm = ChatOpenAI(model=model)
+        self.llm = ChatOpenAI(model=model, temperature=0)
         self.append_data = None
 
     def _generate_pydantic_model(self, df, model_name="DynamicModel"):
@@ -164,11 +164,6 @@ class Engine:
                 File content ready for download.
             - str
                 MIME type corresponding to the file format.
-
-        Raises
-        ------
-        ValueError
-            If an unsupported file extension is provided.
         """
         if file_name.endswith(".csv"):
             output = io.StringIO()
@@ -225,6 +220,8 @@ class Engine:
         5. Optionally append existing data.
         6. Export the result as CSV or XLSX.
         """
+        extra += "\nReturn only a single JSON object matching the schema."
+        
         dynamic_model = self._generate_pydantic_model(sample_data_df)
         examples = self._generate_example_dicts(sample_data_df)
 
@@ -246,7 +243,18 @@ class Engine:
 
         results = generator.generate(subject=subject, extra=extra, runs=runs)
 
-        generated_rows = [r.model_dump() for r in results]
+        generated_rows = []
+
+        for r in results:
+            data = r.model_dump()
+
+            # here are fallbacks if llm didn't deliver data in expected schema
+            # may by added more in the future if some more output errors are detected
+            if isinstance(data, list):
+                generated_rows.extend(data)
+            else:
+                generated_rows.append(data)
+
         generated_df = pd.DataFrame(generated_rows)
         generated_df = generated_df[sample_data_df.columns]
 
