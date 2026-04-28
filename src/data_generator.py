@@ -9,13 +9,8 @@ class DataGenerator:
     Streamlit-based user interface for synthetic tabular data generation.
 
     The class manages the application layout, file uploads, user inputs,
-    and interaction with the :class:`Engine` responsible for generating
+    and interaction with the class engine responsible for generating
     synthetic data.
-
-    Notes
-    -----
-    The instance of :class:`Engine` is stored in ``st.session_state`` to
-    persist across Streamlit reruns.
     """
 
     def __init__(self):
@@ -23,12 +18,8 @@ class DataGenerator:
         Initialize the Streamlit application.
 
         Sets up the page configuration, application title, and ensures
-        that an :class:`Engine` instance exists in the Streamlit session
+        that an engine exists in the Streamlit session
         state.
-
-        Notes
-        -----
-        The engine instance is created only once per user session.
         """
         st.set_page_config(page_title="Data Generator", layout="centered")
         st.title("Synthetic Data Generator")
@@ -56,7 +47,7 @@ class DataGenerator:
 
         Notes
         -----
-        The selected sample rows are passed to the :class:`Engine`
+        The selected sample rows are passed to the engine
         which uses them as few-shot examples for the LLM-based
         synthetic data generator.
         """
@@ -140,7 +131,7 @@ class DataGenerator:
 
                 if st.button("Generate", width="stretch"):
                     try:
-                        data, mime = st.session_state.engine.run(
+                        data, mime = st.session_state.engine(
                             sample_data_df, subject, extra, runs, output_file_name
                         )
 

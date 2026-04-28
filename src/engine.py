@@ -2,7 +2,7 @@ from langchain_core.prompts import FewShotPromptTemplate
 from langchain_core.utils.pydantic import create_model
 from langchain_core.prompts import PromptTemplate
 from langchain_openai import ChatOpenAI
-from dotenv import load_dotenv
+from settings import settings
 
 from langchain_experimental.tabular_synthetic_data.prompts import (
     SYNTHETIC_FEW_SHOT_SUFFIX,
@@ -35,12 +35,6 @@ class Engine:
     append_data : pandas.DataFrame or None
         Optional dataset appended before generated rows in the
         final output file.
-
-    Notes
-    -----
-    Environment variables are loaded using ``python-dotenv``.
-    The OpenAI model can be configured via the ``OPENAI_MODEL``
-    environment variable.
     """
 
     def __init__(self):
@@ -53,136 +47,18 @@ class Engine:
         Notes
         -----
         Default model:
-        ``gpt-4.1-mini`` if the ``OPENAI_MODEL`` environment
+        gpt-4.1-mini if the OPENAI_MODEL environment
         variable is not defined.
         """
-        load_dotenv()
+        self.llm = ChatOpenAI(
+            api_key=settings.openai_api_key,
+            model=settings.openai_model,
+            temperature=settings.openai_temperature,
+        )
 
-        model = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
-
-        self.llm = ChatOpenAI(model=model, temperature=0)
         self.append_data = None
 
-    def _generate_pydantic_model(self, df, model_name="DynamicModel"):
-        """
-        Create a dynamic Pydantic model based on a DataFrame schema.
-
-        Parameters
-        ----------
-        df : pandas.DataFrame
-            Input DataFrame used to infer column names and data types.
-        model_name : str, default="DynamicModel"
-            Name of the generated Pydantic model.
-
-        Returns
-        -------
-        pydantic.BaseModel
-            Dynamically generated model describing the structure
-            of rows in the dataset.
-
-        Notes
-        -----
-        NumPy dtypes are mapped to native Python types:
-
-        - ``int64`` → ``int``
-        - ``float64`` → ``float``
-        - ``object`` → ``str``
-        - ``bool`` → ``bool``
-
-        Unknown types default to ``str``.
-        """
-        type_map = {np.int64: int, np.float64: float, np.object_: str, np.bool_: bool}
-
-        fields = {
-            col: (type_map.get(df[col].dtype.type, str), ...) for col in df.columns
-        }
-
-        return create_model(model_name, **fields)
-
-    def _row_to_prompt(self, row):
-        """
-        Convert a row dictionary into a prompt-friendly string.
-
-        Parameters
-        ----------
-        row : dict
-            Dictionary representing a single dataset row.
-
-        Returns
-        -------
-        str
-            Multiline string representation of the row in the format:
-
-            ``column: value``
-
-        Notes
-        -----
-        The resulting string is used as a few-shot example
-        for the language model.
-        """
-
-        return "\n".join(f"{k}: {v}" for k, v in row.items())
-
-    def _generate_example_dicts(self, df):
-        """
-        Convert a DataFrame into few-shot example dictionaries.
-
-        Parameters
-        ----------
-        df : pandas.DataFrame
-            DataFrame containing sample rows.
-
-        Returns
-        -------
-        list of dict
-            List of dictionaries formatted for LangChain
-            ``FewShotPromptTemplate``.
-        """
-        rows = df.to_dict(orient="records")
-
-        sample_data_dict = [{"example": self._row_to_prompt(row)} for row in rows]
-
-        return sample_data_dict
-
-    def _generate_file(self, file_name, df):
-        """
-        Generate an output file from a DataFrame.
-
-        Parameters
-        ----------
-        file_name : str
-            Target file name including extension (``.csv`` or ``.xlsx``).
-        df : pandas.DataFrame
-            DataFrame to be written to the file.
-
-        Returns
-        -------
-        tuple
-            Tuple containing:
-
-            - bytes
-                File content ready for download.
-            - str
-                MIME type corresponding to the file format.
-        """
-        if file_name.endswith(".csv"):
-            output = io.StringIO()
-            df.to_csv(output, index=False)
-
-            return output.getvalue().encode("utf-8"), "text/csv"
-
-        elif file_name.endswith(".xlsx"):
-            output = io.BytesIO()
-
-            with pd.ExcelWriter(output, engine="openpyxl") as writer:
-                df.to_excel(writer, index=False)
-
-            return (
-                output.getvalue(),
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            )
-
-    def run(self, sample_data_df, subject, extra, runs, file_name):
+    def __call__(self, sample_data_df, subject, extra, runs, file_name):
         """
         Generate synthetic tabular data using an LLM.
 
@@ -221,7 +97,7 @@ class Engine:
         6. Export the result as CSV or XLSX.
         """
         extra += "\nReturn only a single JSON object matching the schema."
-        
+
         dynamic_model = self._generate_pydantic_model(sample_data_df)
         examples = self._generate_example_dicts(sample_data_df)
 
@@ -266,3 +142,122 @@ class Engine:
         data, mime = self._generate_file(file_name, generated_df)
 
         return data, mime
+
+    def _generate_pydantic_model(self, df, model_name="DynamicModel"):
+        """
+        Create a dynamic Pydantic model based on a DataFrame schema.
+
+        Parameters
+        ----------
+        df : pandas.DataFrame
+            Input DataFrame used to infer column names and data types.
+        model_name : str, default="DynamicModel"
+            Name of the generated Pydantic model.
+
+        Returns
+        -------
+        pydantic.BaseModel
+            Dynamically generated model describing the structure
+            of rows in the dataset.
+
+        Notes
+        -----
+        NumPy dtypes are mapped to native Python types:
+
+        - int64 -> int
+        - float64 -> float
+        - object -> str
+        - bool -> bool
+
+        Unknown types default to str.
+        """
+        type_map = {np.int64: int, np.float64: float, np.object_: str, np.bool_: bool}
+
+        fields = {
+            col: (type_map.get(df[col].dtype.type, str), ...) for col in df.columns
+        }
+
+        return create_model(model_name, **fields)
+
+    def _row_to_prompt(self, row):
+        """
+        Convert a row dictionary into a prompt-friendly string.
+
+        Parameters
+        ----------
+        row : dict
+            Dictionary representing a single dataset row.
+
+        Returns
+        -------
+        str
+            Multiline string representation of the row in the format:
+
+            column: value
+
+        Notes
+        -----
+        The resulting string is used as a few-shot example
+        for the language model.
+        """
+
+        return "\n".join(f"{k}: {v}" for k, v in row.items())
+
+    def _generate_example_dicts(self, df):
+        """
+        Convert a DataFrame into few-shot example dictionaries.
+
+        Parameters
+        ----------
+        df : pandas.DataFrame
+            DataFrame containing sample rows.
+
+        Returns
+        -------
+        list of dict
+            List of dictionaries formatted for LangChain
+            FewShotPromptTemplate.
+        """
+        rows = df.to_dict(orient="records")
+
+        sample_data_dict = [{"example": self._row_to_prompt(row)} for row in rows]
+
+        return sample_data_dict
+
+    def _generate_file(self, file_name, df):
+        """
+        Generate an output file from a DataFrame.
+
+        Parameters
+        ----------
+        file_name : str
+            Target file name including extension (csv or xlsx).
+        df : pandas.DataFrame
+            DataFrame to be written to the file.
+
+        Returns
+        -------
+        tuple
+            Tuple containing:
+
+            - bytes
+                File content ready for download.
+            - str
+                MIME type corresponding to the file format.
+        """
+        if file_name.endswith(".csv"):
+            output = io.StringIO()
+            df.to_csv(output, index=False)
+
+            return output.getvalue().encode("utf-8"), "text/csv"
+
+        elif file_name.endswith(".xlsx"):
+            output = io.BytesIO()
+
+            with pd.ExcelWriter(output, engine="openpyxl") as writer:
+                df.to_excel(writer, index=False)
+
+            return (
+                output.getvalue(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )

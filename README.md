@@ -5,6 +5,8 @@ The tool allows users to upload sample data and automatically generate new rows 
 
 The generation process uses **few-shot prompting** with example rows from the dataset to guide the model in producing realistic structured data.
 
+**WARNING:** This program uses LangChain's experimental features that might be unstable.
+
 ---
 
 # Features
@@ -86,9 +88,10 @@ Example:
 ```
 OPENAI_API_KEY=your_openai_api_key
 OPENAI_MODEL=gpt-4.1-mini
+OPENAI_TEMPERATURE=0
 ```
 
-If `OPENAI_MODEL` is not provided, the default model is used (gpt-4.1-mini).
+If `OPENAI_MODEL` or `OPENAI_TEMPERATURE` are not provided, the default values are used (gpt-4.1-mini and 0 respectively).
 
 ---
 
