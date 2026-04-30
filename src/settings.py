@@ -1,5 +1,5 @@
+from pydantic import Field, ValidationError
 from pydantic_settings import BaseSettings
-from pydantic import Field
 
 
 class Settings(BaseSettings):
@@ -33,4 +33,9 @@ class Settings(BaseSettings):
         env_file = ".env"
 
 
-settings = Settings()
+try:
+    settings = Settings()
+except ValidationError:
+    raise Exception(
+        "ERROR: No OpenAI API key provided, please enter your API key in .env file"
+    )
