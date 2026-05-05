@@ -148,6 +148,12 @@ http://localhost:8501
 
 ---
 
+## Demo
+
+![Demo](./demo.gif)
+
+---
+
 # License
 
 MIT License. Feel free to use, modify, and build upon this project.
