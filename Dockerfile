@@ -38,6 +38,3 @@ ENV STREAMLIT_SERVER_ADDRESS=0.0.0.0
 CMD ["streamlit", "run", "src/app.py"]
 
 HEALTHCHECK CMD curl --fail http://localhost:8501/_stcore/health
-
-#docker build -t data-generator .
-#docker run -p 8501:8501 --env-file .env data-generator
