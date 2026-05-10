@@ -88,7 +88,7 @@ Example:
 ```
 OPENAI_API_KEY=your_openai_api_key
 OPENAI_MODEL=gpt-4.1-mini
-OPENAI_TEMPERATURE=0
+OPENAI_TEMPERATURE=0.0
 ```
 
 If `OPENAI_MODEL` or `OPENAI_TEMPERATURE` are not provided, the default values are used (gpt-4.1-mini and 0 respectively).
@@ -107,6 +107,13 @@ Then open the browser at:
 
 ```
 http://localhost:8501
+```
+
+Alternatively run via Docker
+
+```bash
+docker build -t data-generator .
+docker run -p 8501:8501 --env-file .env data-generator
 ```
 
 ---

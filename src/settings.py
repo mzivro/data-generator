@@ -1,5 +1,5 @@
-from pydantic import Field, ValidationError
-from pydantic_settings import BaseSettings
+from pydantic import ValidationError, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -16,26 +16,63 @@ class Settings(BaseSettings):
         Sampling temperature for the model.
     """
 
-    openai_api_key: str = Field(..., env="OPENAI_API_KEY")
-    openai_model: str = Field(default="gpt-4.1-mini", env="OPENAI_MODEL")
-    openai_temperature: float = Field(default=0, env="OPENAI_TEMPERATURE")
+    openai_api_key: str
+    openai_model: str = "gpt-4.1-mini"
+    openai_temperature: float = 0.0
 
-    class Config:
+    model_config = SettingsConfigDict(env_file=".env", env_prefix="", extra="ignore")
+
+    @field_validator("openai_api_key")
+    def validate_openai_api_key(cls, v):
         """
-        Pydantic configuration.
+        Validate OpenAI API key.
 
-        Attributes
+        Parameters
         ----------
-        env_file : str
-            Path to the environment variables file.
-        """
+        v : str
+            API key string.
 
-        env_file = ".env"
+        Returns
+        -------
+        str
+            Stripped API key.
+
+        Raises
+        ------
+        ValueError
+            If API key is empty.
+        """
+        v = v.strip()
+        if not v:
+            raise ValueError("No OpenAI API key provided")
+        return v
+
+    @field_validator("openai_temperature")
+    def validate_openai_temperature(cls, v):
+        """
+        Validate model temperature.
+
+        Parameters
+        ----------
+        v : float
+            Model temperature.
+
+        Returns
+        -------
+        float
+            Validated model temperature.
+
+        Raises
+        ------
+        ValueError
+            If model temperature is not in range.
+        """
+        if 0.0 <= v <= 2.0:
+            return v
+        raise ValueError("Model temperature must be in <0; 2> range")
 
 
 try:
     settings = Settings()
-except ValidationError:
-    raise Exception(
-        "ERROR: No OpenAI API key provided, please enter your API key in .env file"
-    )
+except ValidationError as e:
+    raise RuntimeError(f"Invalid configuration:\n{e}") from e
