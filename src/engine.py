@@ -53,7 +53,7 @@ class Engine:
         self.llm = ChatOpenAI(
             api_key=settings.openai_api_key,
             model=settings.openai_model,
-            temperature=settings.openai_temperature,
+            temperature=settings.openai_temperature
         )
 
         self.append_data = None
@@ -96,7 +96,48 @@ class Engine:
         5. Optionally append existing data.
         6. Export the result as CSV or XLSX.
         """
-        extra += "\nReturn only a single JSON object matching the schema."
+        extra += """\n\n
+        IMPORTANT OUTPUT INSTRUCTIONS:
+
+        Return ONLY a valid JSON object.
+
+        STRICT RULES:
+        - Do NOT return a list or array.
+        - Do NOT wrap the object in [].
+        - Do NOT add explanations.
+        - Do NOT add markdown.
+        - Do NOT use code blocks.
+        - Do NOT add comments.
+        - Do NOT add extra fields.
+        - Do NOT omit required fields.
+        - Every field must exist separately.
+        - Preserve exact field names.
+        - Values must match expected data types.
+        - Output must be valid JSON parseable by Python json.loads().
+
+        CORRECT OUTPUT EXAMPLE:
+        {
+          "name": "John",
+          "age": 25
+        }
+
+        WRONG OUTPUT EXAMPLES:
+
+        [
+          {
+            "name": "John",
+            "age": 25
+          }
+        ]
+
+        "name: John, age: 25"
+
+        {
+          "text": "name: John, age: 25"
+        }
+
+        The response must contain EXACTLY ONE JSON object.
+        """
 
         dynamic_model = self._generate_pydantic_model(sample_data_df)
         examples = self._generate_example_dicts(sample_data_df)
