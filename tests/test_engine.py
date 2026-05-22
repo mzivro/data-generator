@@ -114,7 +114,7 @@ class TestCall:
         mock_generator.generate.assert_called_once()
         call_kwargs = mock_generator.generate.call_args.kwargs
         assert call_kwargs["subject"] == "people"
-        assert "Return only a single JSON object" in call_kwargs["extra"]
+        assert "Return ONLY a valid JSON object." in call_kwargs["extra"]
 
     @patch("engine.create_openai_data_generator")
     def test_handles_list_model_dump(

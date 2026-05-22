@@ -53,7 +53,7 @@ class Engine:
         self.llm = ChatOpenAI(
             api_key=settings.openai_api_key,
             model=settings.openai_model,
-            temperature=settings.openai_temperature
+            temperature=settings.openai_temperature,
         )
 
         self.append_data = None
