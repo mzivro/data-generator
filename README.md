@@ -105,21 +105,22 @@ docker run -p 8501:8501 data-generator
 
 # Usage
 
-1. Upload a dataset (`.csv` or `.xlsx`)
-2. Select:
+1. Enter API key, model and temperature.
+2. Upload a dataset (`.csv` or `.xlsx`)
+3. Select:
 
    * **Start point** (row index)
    * **Number of steps** (sample rows)
-3. Provide optional prompts:
+4. Provide optional prompts:
 
    * **Subject** - dataset topic
    * **Extra prompt** - generation instructions
-4. Choose:
+5. Choose:
 
    * Number of rows to generate
    * Output format
-5. Click **Generate**
-6. Download the generated dataset.
+6. Click **Generate**
+7. Download the generated dataset.
 
 ---
 
@@ -143,6 +144,8 @@ docker run -p 8501:8501 data-generator
 ## Demo
 
 ![Demo](./demo.gif)
+
+[Try It Out](https://mzivro-data-generator.streamlit.app/)
 
 ---
 
