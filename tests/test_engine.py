@@ -1,106 +1,72 @@
 import io
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pandas as pd
 import pytest
+from pydantic import ValidationError
 
 from engine import Engine
+from helpers import API_KEY, MODEL, TEMPERATURE, decode_csv, patch_generator
 
 
-@pytest.fixture
-def sample_df():
-    return pd.DataFrame(
-        {
-            "name": ["Alice", "Bob"],
-            "age": [30, 25],
-            "score": [9.5, 8.0],
-            "active": [True, False],
-        }
+def test_init_passes_settings_to_chat_openai(engine):
+    engine._mock_chat_openai.assert_called_once_with(
+        api_key=API_KEY,
+        model=MODEL,
+        temperature=TEMPERATURE,
     )
 
 
-@pytest.fixture
-def engine():
-    with patch("engine.ChatOpenAI"):
-        return Engine()
+def test_generate_pydantic_model_maps_column_types(engine, sample_df):
+    model = engine._generate_pydantic_model(sample_df)
+    fields = model.model_fields
+    assert fields["name"].annotation is str
+    assert fields["age"].annotation is int
+    assert fields["score"].annotation is float
+    assert fields["active"].annotation is bool
 
 
-class TestEngineInit:
-    @patch("engine.ChatOpenAI")
-    def test_init_configures_llm(self, mock_chat_openai):
-        Engine()
-        mock_chat_openai.assert_called_once()
+def test_generate_pydantic_model_unknown_dtype_defaults_to_str(engine):
+    df = pd.DataFrame({"col": pd.to_datetime(["2024-01-01"])})
+    model = engine._generate_pydantic_model(df)
+    assert model.model_fields["col"].annotation is str
 
 
-class TestGeneratePydanticModel:
-    def test_maps_column_types(self, engine, sample_df):
-        model = engine._generate_pydantic_model(sample_df)
-        fields = model.model_fields
-        assert fields["name"].annotation is str
-        assert fields["age"].annotation is int
-        assert fields["score"].annotation is float
-        assert fields["active"].annotation is bool
-
-    def test_unknown_dtype_defaults_to_str(self, engine):
-        df = pd.DataFrame({"col": pd.to_datetime(["2024-01-01"])})
-        model = engine._generate_pydantic_model(df)
-        assert model.model_fields["col"].annotation is str
-
-    def test_custom_model_name(self, engine, sample_df):
-        model = engine._generate_pydantic_model(sample_df, model_name="CustomRow")
-        assert model.__name__ == "CustomRow"
+def test_generate_pydantic_model_custom_name(engine, sample_df):
+    model = engine._generate_pydantic_model(sample_df, model_name="CustomRow")
+    assert model.__name__ == "CustomRow"
 
 
-class TestRowToPrompt:
-    def test_formats_row_as_key_value_lines(self, engine):
-        row = {"name": "Alice", "age": 30}
-        assert engine._row_to_prompt(row) == "name: Alice\nage: 30"
+def test_row_to_prompt(engine):
+    assert engine._row_to_prompt({"name": "Alice", "age": 30}) == "name: Alice\nage: 30"
 
 
-class TestGenerateExampleDicts:
-    def test_returns_few_shot_examples(self, engine, sample_df):
-        examples = engine._generate_example_dicts(sample_df)
-        assert len(examples) == len(sample_df)
-        assert all("example" in ex for ex in examples)
-        assert "name: Alice" in examples[0]["example"]
-        assert "age: 30" in examples[0]["example"]
+def test_generate_example_dicts(engine, sample_df):
+    examples = engine._generate_example_dicts(sample_df)
+    assert len(examples) == len(sample_df)
+    assert examples[0] == {
+        "example": "name: Alice\nage: 30\nscore: 9.5\nactive: True"
+    }
 
 
-class TestGenerateFile:
-    def test_csv_output(self, engine, sample_df):
-        data, mime = engine._generate_file("output.csv", sample_df)
-        assert mime == "text/csv"
-        content = data.decode("utf-8")
-        assert "name,age,score,active" in content
-        assert "Alice" in content
-
-    def test_xlsx_output(self, engine, sample_df):
-        data, mime = engine._generate_file("output.xlsx", sample_df)
-        assert mime == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        assert isinstance(data, bytes)
-        assert len(data) > 0
-        roundtrip = pd.read_excel(io.BytesIO(data))
-        pd.testing.assert_frame_equal(
-            roundtrip, sample_df, check_dtype=False
-        )
+def test_generate_file_csv(engine, sample_df):
+    data, mime = engine._generate_file("output.csv", sample_df)
+    assert mime == "text/csv"
+    pd.testing.assert_frame_equal(decode_csv(data), sample_df, check_dtype=False)
 
 
-class TestCall:
-    @patch("engine.create_openai_data_generator")
-    def test_generates_csv_with_mocked_llm(
-        self, mock_create_generator, engine, sample_df
-    ):
-        mock_row = MagicMock()
-        mock_row.model_dump.return_value = {
-            "name": "Carol",
-            "age": 40,
-            "score": 7.5,
-            "active": True,
-        }
-        mock_generator = MagicMock()
-        mock_generator.generate.return_value = [mock_row]
-        mock_create_generator.return_value = mock_generator
+def test_generate_file_xlsx(engine, sample_df):
+    data, mime = engine._generate_file("output.xlsx", sample_df)
+    assert mime == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    roundtrip = pd.read_excel(io.BytesIO(data))
+    pd.testing.assert_frame_equal(roundtrip, sample_df, check_dtype=False)
 
+
+def test_call_exports_generated_rows(engine, sample_df):
+    generated = {"name": "Carol", "age": 40, "score": 7.5, "active": True}
+    patch_ctx, mock_generator = patch_generator([generated])
+
+    with patch_ctx:
         data, mime = engine(
             sample_data_df=sample_df,
             subject="people",
@@ -109,62 +75,47 @@ class TestCall:
             file_name="out.csv",
         )
 
-        assert mime == "text/csv"
-        assert "Carol" in data.decode("utf-8")
-        mock_generator.generate.assert_called_once()
-        call_kwargs = mock_generator.generate.call_args.kwargs
-        assert call_kwargs["subject"] == "people"
-        assert "Return ONLY a valid JSON object." in call_kwargs["extra"]
+    assert mime == "text/csv"
+    assert decode_csv(data).iloc[0].to_dict() == generated
 
-    @patch("engine.create_openai_data_generator")
-    def test_handles_list_model_dump(
-        self, mock_create_generator, engine, sample_df
-    ):
-        mock_row = MagicMock()
-        mock_row.model_dump.return_value = [
-            {"name": "Dan", "age": 22, "score": 6.0, "active": False},
-            {"name": "Eve", "age": 33, "score": 8.5, "active": True},
+    mock_generator.generate.assert_called_once()
+    kwargs = mock_generator.generate.call_args.kwargs
+    assert kwargs["subject"] == "people"
+    assert kwargs["runs"] == 1
+    assert kwargs["extra"].startswith("random values")
+    assert "Return ONLY a valid JSON object." in kwargs["extra"]
+
+
+def test_call_extends_rows_when_model_dump_returns_list(engine, sample_df):
+    patch_ctx, _ = patch_generator(
+        [
+            [
+                {"name": "Dan", "age": 22, "score": 6.0, "active": False},
+                {"name": "Eve", "age": 33, "score": 8.5, "active": True},
+            ]
         ]
-        mock_generator = MagicMock()
-        mock_generator.generate.return_value = [mock_row]
-        mock_create_generator.return_value = mock_generator
+    )
 
-        data, mime = engine(
-            sample_data_df=sample_df,
-            subject="people",
-            extra="",
-            runs=2,
-            file_name="out.csv",
-        )
+    with patch_ctx:
+        data, _ = engine(sample_df, "people", "", runs=2, file_name="out.csv")
 
-        content = data.decode("utf-8")
-        assert "Dan" in content
-        assert "Eve" in content
+    assert decode_csv(data)["name"].tolist() == ["Dan", "Eve"]
 
-    @patch("engine.create_openai_data_generator")
-    def test_appends_existing_data(
-        self, mock_create_generator, engine, sample_df
-    ):
-        mock_row = MagicMock()
-        mock_row.model_dump.return_value = {
-            "name": "Frank",
-            "age": 50,
-            "score": 5.0,
-            "active": False,
-        }
-        mock_generator = MagicMock()
-        mock_generator.generate.return_value = [mock_row]
-        mock_create_generator.return_value = mock_generator
 
-        engine.append_data = sample_df.iloc[[0]]
-        data, _ = engine(
-            sample_data_df=sample_df,
-            subject="people",
-            extra="",
-            runs=1,
-            file_name="out.csv",
-        )
+def test_call_prepends_append_data(engine, sample_df):
+    generated = {"name": "Frank", "age": 50, "score": 5.0, "active": False}
+    patch_ctx, _ = patch_generator([generated])
+    engine.append_data = sample_df.iloc[[0]]
 
-        content = data.decode("utf-8")
-        assert content.count("Alice") == 1
-        assert "Frank" in content
+    with patch_ctx:
+        data, _ = engine(sample_df, "people", "", runs=1, file_name="out.csv")
+
+    result = decode_csv(data)
+    assert result.iloc[0]["name"] == "Alice"
+    assert result.iloc[1]["name"] == "Frank"
+
+
+def test_init_rejects_empty_api_key():
+    with patch("engine.ChatOpenAI"):
+        with pytest.raises(ValidationError, match="No OpenAI API key provided"):
+            Engine("", MODEL, TEMPERATURE)

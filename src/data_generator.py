@@ -17,15 +17,17 @@ class DataGenerator:
         """
         Initialize the Streamlit application.
 
-        Sets up the page configuration, application title, and ensures
-        that an engine exists in the Streamlit session
-        state.
+        Sets up the page configuration, application title, and 
+        session state variables.
         """
         st.set_page_config(page_title="Data Generator", layout="centered")
         st.title("Synthetic Data Generator")
 
+        if "submitted" not in st.session_state:
+            st.session_state.submitted = False
+
         if "engine" not in st.session_state:
-            st.session_state.engine = Engine()
+            st.session_state.engine = None
 
     def run(self):
         """
@@ -33,6 +35,7 @@ class DataGenerator:
 
         Handles the following steps:
 
+        - Configuring model parameters
         - Uploading a sample dataset (CSV or XLSX)
         - Selecting sample rows used as examples
         - Collecting generation parameters
@@ -42,8 +45,8 @@ class DataGenerator:
         Raises
         ------
         Exception
-            Displays an error message in the UI if file loading or
-            generation fails.
+            Displays an error message in the UI if model configuration,
+            file loading or generation fails.
 
         Notes
         -----
@@ -51,98 +54,113 @@ class DataGenerator:
         which uses them as few-shot examples for the LLM-based
         synthetic data generator.
         """
-        uploaded_file = st.file_uploader("Load sample data", type=["csv", "xlsx"])
+        api_key = st.text_input("Enter your OpenAI API key")
+        model = st.text_input("Enter OpenAI model", value="gpt-4.1-mini")
+        temperature = st.slider("Choose model temperature", min_value=0.0, max_value=2.0, value=0.0)
 
-        if uploaded_file is not None:
+        if st.button("Submit", width="stretch"):
             try:
-                if uploaded_file.name.endswith(".csv"):
-                    df = pd.read_csv(uploaded_file)
-                elif uploaded_file.name.endswith(".xlsx"):
-                    df = pd.read_excel(uploaded_file)
+                st.session_state.engine = Engine(api_key, model, temperature)
 
-                st.session_state.engine.whole_file = df
+                st.session_state.submitted = True
+            except Exception as e:
+                st.session_state.submitted = False
 
-                col_1, col_2 = st.columns(2)
+                st.error(f"An error has occured: {e}")
 
-                with col_1:
-                    start_point = st.number_input(
-                        "Start point", min_value=0, value=0, step=1
+        if st.session_state.submitted:
+            uploaded_file = st.file_uploader("Load sample data", type=["csv", "xlsx"])
+
+            if uploaded_file is not None:
+                try:
+                    if uploaded_file.name.endswith(".csv"):
+                        df = pd.read_csv(uploaded_file)
+                    elif uploaded_file.name.endswith(".xlsx"):
+                        df = pd.read_excel(uploaded_file)
+
+                    st.session_state.engine.whole_file = df
+
+                    col_1, col_2 = st.columns(2)
+
+                    with col_1:
+                        start_point = st.number_input(
+                            "Start point", min_value=0, value=0, step=1
+                        )
+
+                    with col_2:
+                        steps = st.number_input("Steps", min_value=1, value=5, step=1)
+
+                    st.subheader("Sample data")
+
+                    sample_data_df = df.iloc[start_point : start_point + steps]
+
+                    st.dataframe(sample_data_df)
+
+                    subject = st.text_input(
+                        "Enter data subject",
+                        value="example data",
+                        help="A topic about the sample data, it might improve the results",
                     )
 
-                with col_2:
-                    steps = st.number_input("Steps", min_value=1, value=5, step=1)
+                    extra = st.text_input(
+                        "Enter extra prompt",
+                        value="choose all values at random",
+                        help="Extra prompt for LLM during data generation",
+                    )
 
-                st.subheader("Sample data")
+                    runs = st.number_input(
+                        "Choose runs count",
+                        min_value=1,
+                        value=5,
+                        step=1,
+                        help="Count of data rows which LLM must generate",
+                    )
 
-                sample_data_df = df.iloc[start_point : start_point + steps]
+                    file_name = st.text_input("Enter file name", value="generated")
+                    file_format = st.radio(
+                        "Choose a file format", [".csv", ".xlsx"], horizontal=True
+                    )
 
-                st.dataframe(sample_data_df)
+                    append_mode = st.radio(
+                        "What do you want to append?",
+                        [
+                            "Do not append anything",
+                            "Append sample data",
+                            "Append whole data",
+                        ],
+                        captions=[
+                            "Does not append anything to the file",
+                            "Appends sample data ahead of the file",
+                            "Appends whole data ahead of the file",
+                        ],
+                        horizontal=True,
+                    )
 
-                subject = st.text_input(
-                    "Enter data subject",
-                    value="example data",
-                    help="A topic about the sample data, it might improve the results",
-                )
+                    if append_mode == "Append sample data":
+                        st.session_state.engine.append_data = sample_data_df
+                    elif append_mode == "Append whole data":
+                        st.session_state.engine.append_data = df
+                    else:
+                        st.session_state.engine.append_data = None
 
-                extra = st.text_input(
-                    "Enter extra prompt",
-                    value="choose all values at random",
-                    help="Extra prompt for LLM during data generation",
-                )
+                    output_file_name = file_name + file_format
 
-                runs = st.number_input(
-                    "Choose runs count",
-                    min_value=1,
-                    value=5,
-                    step=1,
-                    help="Count of data rows which LLM must generate",
-                )
+                    st.subheader(f"Output file name: {output_file_name}")
 
-                file_name = st.text_input("Enter file name", value="generated")
-                file_format = st.radio(
-                    "Choose a file format", [".csv", ".xlsx"], horizontal=True
-                )
+                    if st.button("Generate", width="stretch"):
+                        try:
+                            data, mime = st.session_state.engine(
+                                sample_data_df, subject, extra, runs, output_file_name
+                            )
 
-                append_mode = st.radio(
-                    "What do you want to append?",
-                    [
-                        "Do not append anything",
-                        "Append sample data",
-                        "Append whole data",
-                    ],
-                    captions=[
-                        "Does not append anything to the file",
-                        "Appends sample data ahead of the file",
-                        "Appends whole data ahead of the file",
-                    ],
-                    horizontal=True,
-                )
-
-                if append_mode == "Append sample data":
-                    st.session_state.engine.append_data = sample_data_df
-                elif append_mode == "Append whole data":
-                    st.session_state.engine.append_data = df
-                else:
-                    st.session_state.engine.append_data = None
-
-                output_file_name = file_name + file_format
-
-                st.subheader(f"Output file name: {output_file_name}")
-
-                if st.button("Generate", width="stretch"):
-                    try:
-                        data, mime = st.session_state.engine(
-                            sample_data_df, subject, extra, runs, output_file_name
-                        )
-
-                        st.download_button(
-                            label="Success! Click here to download the file",
-                            data=data,
-                            file_name=output_file_name,
-                            mime=mime,
-                            width="stretch",
-                        )
-                    except Exception as e:
-                        st.error(f"An error has occured: {e}")
-            except Exception as e:
-                st.error(f"An error has occured: {e}")
+                            st.download_button(
+                                label="Success! Click here to download the file",
+                                data=data,
+                                file_name=output_file_name,
+                                mime=mime,
+                                width="stretch",
+                            )
+                        except Exception as e:
+                            st.error(f"An error has occured: {e}")
+                except Exception as e:
+                    st.error(f"An error has occured: {e}")

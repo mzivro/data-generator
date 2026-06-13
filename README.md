@@ -34,11 +34,12 @@ app.py                  # Entry point
 
 ### Application Flow
 
-1. User uploads a dataset.
-2. A subset of rows is selected as **few-shot examples**.
-3. A **dynamic schema** is inferred from the dataset.
-4. The LLM generates new rows based on examples and prompts.
-5. Results are exported to a downloadable file.
+1. User enters OpenAI API key and model config.
+2. Uploads a dataset.
+3. A subset of rows is selected as **few-shot examples**.
+4. A **dynamic schema** is inferred from the dataset.
+5. The LLM generates new rows based on examples and prompts.
+6. Results are exported to a downloadable file.
 
 ---
 
@@ -79,22 +80,6 @@ pip install -r requirements.txt
 
 ---
 
-# Environment Variables
-
-Create a `.env` file in the project root.
-
-Example:
-
-```
-OPENAI_API_KEY=your_openai_api_key
-OPENAI_MODEL=gpt-4.1-mini
-OPENAI_TEMPERATURE=0.0
-```
-
-If `OPENAI_MODEL` or `OPENAI_TEMPERATURE` are not provided, the default values are used (gpt-4.1-mini and 0 respectively).
-
----
-
 # Running the Application
 
 Start the Streamlit application:
@@ -113,7 +98,7 @@ Alternatively run via Docker
 
 ```bash
 docker build -t data-generator .
-docker run -p 8501:8501 --env-file .env data-generator
+docker run -p 8501:8501 data-generator
 ```
 
 ---

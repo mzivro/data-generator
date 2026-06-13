@@ -1,28 +1,25 @@
-from pydantic import ValidationError, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import BaseModel, field_validator
 
 
-class Settings(BaseSettings):
+class Settings(BaseModel):
     """
     Application configuration loaded from environment variables.
 
     Attributes
     ----------
-    openai_api_key : str
+    api_key : str
         API key for OpenAI services.
-    openai_model : str
+    model : str
         OpenAI model.
-    openai_temperature : float
+    temperature : float
         Sampling temperature for the model.
     """
 
-    openai_api_key: str
-    openai_model: str = "gpt-4.1-mini"
-    openai_temperature: float = 0.0
+    api_key: str
+    model: str = "gpt-4.1-mini"
+    temperature: float = 0.0
 
-    model_config = SettingsConfigDict(env_file=".env", env_prefix="", extra="ignore")
-
-    @field_validator("openai_api_key")
+    @field_validator("api_key")
     def validate_openai_api_key(cls, v):
         """
         Validate OpenAI API key.
@@ -47,32 +44,29 @@ class Settings(BaseSettings):
             raise ValueError("No OpenAI API key provided")
         return v
 
-    @field_validator("openai_temperature")
-    def validate_openai_temperature(cls, v):
+    @field_validator("model")
+    def validate_model(cls, v):
         """
-        Validate model temperature.
+        Validate and normalize the model name.
 
         Parameters
         ----------
-        v : float
-            Model temperature.
+        v : str
+            Model name provided by the user.
 
         Returns
         -------
-        float
-            Validated model temperature.
+        str
+            Trimmed model name.
 
         Raises
         ------
         ValueError
-            If model temperature is not in range.
+            If the model name is empty after removing whitespace.
         """
-        if 0.0 <= v <= 2.0:
-            return v
-        raise ValueError("Model temperature must be in <0; 2> range")
+        v = v.strip()
 
+        if not v:
+            raise ValueError("Model cannot be empty")
 
-try:
-    settings = Settings()
-except ValidationError as e:
-    raise RuntimeError(f"Invalid configuration:\n{e}") from e
+        return v

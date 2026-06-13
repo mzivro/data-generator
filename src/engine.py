@@ -2,7 +2,7 @@ from langchain_core.prompts import FewShotPromptTemplate
 from langchain_core.utils.pydantic import create_model
 from langchain_core.prompts import PromptTemplate
 from langchain_openai import ChatOpenAI
-from settings import settings
+from settings import Settings
 
 from langchain_experimental.tabular_synthetic_data.prompts import (
     SYNTHETIC_FEW_SHOT_SUFFIX,
@@ -37,23 +37,23 @@ class Engine:
         final output file.
     """
 
-    def __init__(self):
+    def __init__(self, api_key, model, temperature):
         """
         Initialize the synthetic data engine.
 
-        Loads environment variables and initializes the OpenAI
+        Loads variables and initializes the OpenAI
         chat model used for data generation.
-
-        Notes
-        -----
-        Default model:
-        gpt-4.1-mini if the OPENAI_MODEL environment
-        variable is not defined.
         """
+        settings = Settings(
+            api_key=api_key,
+            model=model,
+            temperature=temperature
+        )
+
         self.llm = ChatOpenAI(
-            api_key=settings.openai_api_key,
-            model=settings.openai_model,
-            temperature=settings.openai_temperature,
+            api_key=settings.api_key,
+            model=settings.model,
+            temperature=settings.temperature,
         )
 
         self.append_data = None
